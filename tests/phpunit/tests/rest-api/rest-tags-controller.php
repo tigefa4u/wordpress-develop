@@ -4,9 +4,7 @@
  *
  * @package WordPress
  * @subpackage REST API
- */
-
-/**
+ *
  * @group restapi
  */
 class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
@@ -417,7 +415,7 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 		$i = 0;
 		foreach ( $tags as $tag ) {
 			$this->assertSame( $tag['name'], "Tag {$i}" );
-			$i++;
+			++$i;
 		}
 
 		$request = new WP_REST_Request( 'GET', '/wp/v2/tags' );
@@ -432,7 +430,7 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 
 		foreach ( $tags as $tag ) {
 			$this->assertSame( $tag['name'], "Tag {$i}" );
-			$i++;
+			++$i;
 		}
 	}
 
@@ -482,6 +480,55 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 		$data = $response->get_data();
 		$this->assertCount( 2, $data );
 		$this->assertSame( 'Cape', $data[0]['name'] );
+	}
+
+	/**
+	 * @ticket 62500
+	 */
+	public function test_get_items_custom_tax_without_post_arg_respects_tax_query_args() {
+		register_taxonomy(
+			'batman',
+			'post',
+			array(
+				'show_in_rest' => true,
+				'sort'         => true,
+				'args'         => array(
+					'order'   => 'DESC',
+					'orderby' => 'name',
+				),
+			)
+		);
+		$controller = new WP_REST_Terms_Controller( 'batman' );
+		$controller->register_routes();
+		$term1 = self::factory()->term->create(
+			array(
+				'name'     => 'Cycle',
+				'taxonomy' => 'batman',
+			)
+		);
+		$term2 = self::factory()->term->create(
+			array(
+				'name'     => 'Pod',
+				'taxonomy' => 'batman',
+			)
+		);
+		$term3 = self::factory()->term->create(
+			array(
+				'name'     => 'Cave',
+				'taxonomy' => 'batman',
+			)
+		);
+
+		$request  = new WP_REST_Request( 'GET', '/wp/v2/batman' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertCount( 3, $data );
+		$this->assertSame(
+			array( 'Pod', 'Cycle', 'Cave' ),
+			array_column( $data, 'name' )
+		);
 	}
 
 	public function test_get_items_search_args() {
@@ -601,8 +648,8 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 
 		// 3rd page.
 		self::factory()->tag->create();
-		$total_tags++;
-		$total_pages++;
+		++$total_tags;
+		++$total_pages;
 		$request = new WP_REST_Request( 'GET', '/wp/v2/tags' );
 		$request->set_param( 'page', 3 );
 		$response = rest_get_server()->dispatch( $request );
@@ -1338,8 +1385,6 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 	 * @ticket 38504
 	 */
 	public function test_object_term_queries_are_cached() {
-		global $wpdb;
-
 		$tags = self::factory()->tag->create_many( 2 );
 		$p    = self::factory()->post->create();
 		wp_set_object_terms( $p, $tags[0], 'post_tag' );
@@ -1351,7 +1396,7 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 
 		unset( $request, $response );
 
-		$num_queries = $wpdb->num_queries;
+		$num_queries = get_num_queries();
 
 		$request = new WP_REST_Request( 'GET', '/wp/v2/tags' );
 		$request->set_param( 'post', $p );
@@ -1359,7 +1404,7 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 		$found_2  = wp_list_pluck( $response->data, 'id' );
 
 		$this->assertSameSets( $found_1, $found_2 );
-		$this->assertSame( $num_queries, $wpdb->num_queries );
+		$this->assertSame( $num_queries, get_num_queries() );
 	}
 
 	/**
@@ -1413,7 +1458,7 @@ class WP_Test_REST_Tags_Controller extends WP_Test_REST_Controller_Testcase {
 			'hide_empty' => false,
 		);
 		$tags = get_terms( 'post_tag', $args );
-		$this->assertSame( count( $tags ), count( $data ) );
+		$this->assertCount( count( $tags ), $data );
 		$this->assertSame( $tags[0]->term_id, $data[0]['id'] );
 		$this->assertSame( $tags[0]->name, $data[0]['name'] );
 		$this->assertSame( $tags[0]->slug, $data[0]['slug'] );

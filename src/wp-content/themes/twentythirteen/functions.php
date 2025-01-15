@@ -46,11 +46,15 @@ if ( version_compare( $GLOBALS['wp_version'], '3.6-alpha', '<' ) ) {
 }
 
 /**
- * Block Patterns.
+ * Register block patterns and pattern categories.
  *
- * @since Twenty Thirteen 3.4
+ * @since Twenty Thirteen 4.3
  */
-require get_template_directory() . '/inc/block-patterns.php';
+function twentythirteen_register_block_patterns() {
+	require get_template_directory() . '/inc/block-patterns.php';
+}
+
+add_action( 'init', 'twentythirteen_register_block_patterns' );
 
 /**
  * Twenty Thirteen setup.
@@ -75,8 +79,15 @@ function twentythirteen_setup() {
 	 * If you're building a theme based on Twenty Thirteen, use a find and
 	 * replace to change 'twentythirteen' to the name of your theme in all
 	 * template files.
+	 *
+	 * Manual loading of text domain is not required after the introduction of
+	 * just in time translation loading in WordPress version 4.6.
+	 *
+	 * @ticket 58318
 	 */
-	load_theme_textdomain( 'twentythirteen' );
+	if ( version_compare( $GLOBALS['wp_version'], '4.6', '<' ) ) {
+		load_theme_textdomain( 'twentythirteen' );
+	}
 
 	/*
 	 * This theme styles the visual editor to resemble the theme style,
@@ -86,7 +97,7 @@ function twentythirteen_setup() {
 	$font_stylesheet = str_replace(
 		array( get_template_directory_uri() . '/', get_stylesheet_directory_uri() . '/' ),
 		'',
-		twentythirteen_fonts_url()
+		(string) twentythirteen_fonts_url()
 	);
 	add_editor_style( array( 'css/editor-style.css', 'genericons/genericons.css', $font_stylesheet ) );
 
@@ -214,7 +225,7 @@ function twentythirteen_setup() {
 
 	/*
 	 * This theme supports all available post formats by default.
-	 * See https://wordpress.org/support/article/post-formats/
+	 * See: https://developer.wordpress.org/advanced-administration/wordpress/post-formats/
 	 */
 	add_theme_support(
 		'post-formats',
@@ -314,7 +325,16 @@ function twentythirteen_scripts_styles() {
 	}
 
 	// Loads JavaScript file with functionality specific to Twenty Thirteen.
-	wp_enqueue_script( 'twentythirteen-script', get_template_directory_uri() . '/js/functions.js', array( 'jquery' ), '20210122', true );
+	wp_enqueue_script(
+		'twentythirteen-script',
+		get_template_directory_uri() . '/js/functions.js',
+		array( 'jquery' ),
+		'20230526',
+		array(
+			'in_footer' => false, // Because involves header.
+			'strategy'  => 'defer',
+		)
+	);
 
 	// Add Source Sans Pro and Bitter fonts, used in the main stylesheet.
 	$font_version = ( 0 === strpos( (string) twentythirteen_fonts_url(), get_template_directory_uri() . '/' ) ) ? '20230328' : null;
@@ -324,13 +344,13 @@ function twentythirteen_scripts_styles() {
 	wp_enqueue_style( 'genericons', get_template_directory_uri() . '/genericons/genericons.css', array(), '3.0.3' );
 
 	// Loads our main stylesheet.
-	wp_enqueue_style( 'twentythirteen-style', get_stylesheet_uri(), array(), '20221101' );
+	wp_enqueue_style( 'twentythirteen-style', get_stylesheet_uri(), array(), '20241112' );
 
 	// Theme block stylesheet.
-	wp_enqueue_style( 'twentythirteen-block-style', get_template_directory_uri() . '/css/blocks.css', array( 'twentythirteen-style' ), '20210622' );
+	wp_enqueue_style( 'twentythirteen-block-style', get_template_directory_uri() . '/css/blocks.css', array( 'twentythirteen-style' ), '20240520' );
 
-	// Loads the Internet Explorer specific stylesheet.
-	wp_enqueue_style( 'twentythirteen-ie', get_template_directory_uri() . '/css/ie.css', array( 'twentythirteen-style' ), '20150214' );
+	// Registers the Internet Explorer specific stylesheet.
+	wp_register_style( 'twentythirteen-ie', get_template_directory_uri() . '/css/ie.css', array( 'twentythirteen-style' ), '20150214' );
 	wp_style_add_data( 'twentythirteen-ie', 'conditional', 'lt IE 9' );
 }
 add_action( 'wp_enqueue_scripts', 'twentythirteen_scripts_styles' );
@@ -368,7 +388,7 @@ function twentythirteen_resource_hints( $urls, $relation_type ) {
  */
 function twentythirteen_block_editor_styles() {
 	// Block styles.
-	wp_enqueue_style( 'twentythirteen-block-editor-style', get_template_directory_uri() . '/css/editor-blocks.css', array(), '20210621' );
+	wp_enqueue_style( 'twentythirteen-block-editor-style', get_template_directory_uri() . '/css/editor-blocks.css', array(), '20240716' );
 	// Add custom fonts.
 	$font_version = ( 0 === strpos( (string) twentythirteen_fonts_url(), get_template_directory_uri() . '/' ) ) ? '20230328' : null;
 	wp_enqueue_style( 'twentythirteen-fonts', twentythirteen_fonts_url(), array(), $font_version );
@@ -382,6 +402,9 @@ add_action( 'enqueue_block_editor_assets', 'twentythirteen_block_editor_styles' 
  * in head of document, based on current view.
  *
  * @since Twenty Thirteen 1.0
+ *
+ * @global int $paged WordPress archive pagination page count.
+ * @global int $page  WordPress paginated post page count.
  *
  * @param string $title Default title text for current view.
  * @param string $sep   Optional separator.
@@ -652,7 +675,7 @@ if ( ! function_exists( 'twentythirteen_the_attached_image' ) ) :
 		// If there is more than 1 attachment in a gallery...
 		if ( count( $attachment_ids ) > 1 ) {
 			foreach ( $attachment_ids as $idx => $attachment_id ) {
-				if ( $attachment_id == $post->ID ) {
+				if ( $attachment_id === $post->ID ) {
 					$next_id = $attachment_ids[ ( $idx + 1 ) % count( $attachment_ids ) ];
 					break;
 				}
@@ -751,6 +774,8 @@ add_filter( 'body_class', 'twentythirteen_body_class' );
  * Adjust content_width value for video post formats and attachment templates.
  *
  * @since Twenty Thirteen 1.0
+ *
+ * @global int $content_width Content width.
  */
 function twentythirteen_content_width() {
 	global $content_width;
@@ -831,7 +856,7 @@ function twentythirteen_customize_partial_blogdescription() {
  * @since Twenty Thirteen 1.0
  */
 function twentythirteen_customize_preview_js() {
-	wp_enqueue_script( 'twentythirteen-customizer', get_template_directory_uri() . '/js/theme-customizer.js', array( 'customize-preview' ), '20200516', true );
+	wp_enqueue_script( 'twentythirteen-customizer', get_template_directory_uri() . '/js/theme-customizer.js', array( 'customize-preview' ), '20200516', array( 'in_footer' => true ) );
 }
 add_action( 'customize_preview_init', 'twentythirteen_customize_preview_js' );
 
